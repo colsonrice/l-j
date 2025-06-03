@@ -1,5 +1,9 @@
 name: Hourly Lottery History Update
 
+# Explicitly give the workflow write access to repo contents
+permissions:
+  contents: write
+
 on:
   schedule:
     - cron: '0 * * * *'
@@ -9,10 +13,22 @@ jobs:
   update-history:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository (all branches)
+      - name: Checkout repository (all branches + credentials)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true
+
+      - name: Show current Git remotes & branches
+        run: |
+          echo "--- local branches ---"
+          git branch -vv
+          echo
+          echo "--- remote info ---"
+          git remote -v
+          echo
+          echo "--- HEAD ---"
+          git rev-parse --abbrev-ref HEAD
 
       - name: Set up Python 3.x
         uses: actions/setup-python@v4
@@ -32,10 +48,19 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          echo "Checking for changes to history.json..."
           if [ -n "$(git status --porcelain history.json)" ]; then
+            echo "⚡ history.json has changed. Preparing to commit and push..."
             git add history.json
             git commit -m "Update lottery history $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+
+            echo "> Before push, show remotes and HEAD:"
+            git branch -vv
+            git remote -v
+
             git push origin HEAD:gh-pages
+            echo "✅ Pushed history.json to gh-pages."
           else
-            echo "No changes in history.json; skipping commit."
+            echo "ℹ️ No changes in history.json; skipping commit."
           fi
