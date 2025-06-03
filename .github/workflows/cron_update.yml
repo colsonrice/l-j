@@ -1,41 +1,74 @@
 name: Hourly Lottery History Update
 
+# Give the workflow permission to write to repo contents
+permissions:
+  contents: write
+
 on:
   schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
+    - cron: '0 * * * *'        # once per hour (UTC)
+  workflow_dispatch:          # allow manual trigger
 
 jobs:
   update-history:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository (all branches)
+      # ─── STEP A: Checkout all branches, persist credentials ─────────────────
+      - name: Checkout repository (all branches + credentials)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true   # so we can push back
 
+      # Print Git state for debugging
+      - name: Show current Git remotes & branches
+        run: |
+          echo "=== Local branches ==="
+          git branch -vv
+          echo
+          echo "=== Remote info ==="
+          git remote -v
+          echo
+          echo "=== HEAD ==="
+          git rev-parse --abbrev-ref HEAD
+
+      # ─── STEP B: Set up Python ─────────────────────────────────────────────────
       - name: Set up Python 3.x
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
 
+      # ─── STEP C: Install dependencies ───────────────────────────────────────────
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install requests beautifulsoup4
 
+      # ─── STEP D: Run the scraper ─────────────────────────────────────────────────
       - name: Run update_jackpots.py
         run: |
           python update_jackpots.py
 
-      - name: Commit & push history.json if changed
+      # ─── STEP E: Commit & push history.json if changed ──────────────────────────
+      - name: Commit & force-push history.json to gh-pages
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Make sure the runner knows about the remote gh-pages branch
+          git fetch origin gh-pages:gh-pages
+
+          echo "Checking for changes to history.json..."
           if [ -n "$(git status --porcelain history.json)" ]; then
+            echo "⚡ history.json has changed. Committing and force‐pushing..."
+
             git add history.json
             git commit -m "Update lottery history $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-            git push origin HEAD:gh-pages
+
+            # Force‐push HEAD (main) into gh-pages, overwriting remote
+            git push origin HEAD:gh-pages --force
+            echo "✅ Force‐pushed history.json to gh-pages."
           else
-            echo "No changes in history.json; skipping commit."
+            echo "ℹ️ No changes in history.json; skipping push."
           fi
