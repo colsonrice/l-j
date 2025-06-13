@@ -1,0 +1,7 @@
+# Scraper + API dependencies
+requests
+beautifulsoup4
+
+# API framework
+fastapi
+uvicorn
